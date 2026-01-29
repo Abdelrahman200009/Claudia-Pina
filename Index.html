@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎧 Claudia Pina — Transcriber</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 1.5rem;
+    }
+    .card {
+      background: #1e293b;
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+      width: 100%;
+      max-width: 600px;
+      text-align: center;
+    }
+    h1 { color: #38bdf8; margin-bottom: .25rem; }
+    p { margin-top: 0; color: #94a3b8; }
+    h3 { margin-top: 1.5rem; color: #38bdf8; }
+    input, select, button, textarea {
+      width: 100%;
+      padding: .75rem;
+      border-radius: .5rem;
+      border: none;
+      outline: none;
+      margin-top: 1rem;
+      font-size: 1rem;
+    }
+    button {
+      background: #38bdf8;
+      color: #0f172a;
+      font-weight: bold;
+      cursor: pointer;
+      transition: .2s;
+    }
+    button:hover { background: #7dd3fc; }
+    textarea {
+      background: #0f172a;
+      color: #f8fafc;
+      resize: vertical;
+      height: 140px;
+      margin-top: 1rem;
+    }
+    .small-btn {
+      width: auto;
+      padding: .4rem .8rem;
+      font-size: .9rem;
+      margin: .3rem;
+      border-radius: 6px;
+      background-color: #64748b;
+      color: white;
+    }
+    .small-btn:hover { background-color: #94a3b8; }
+    .status {
+      margin-top: .5rem;
+      font-size: .9rem;
+      color: #94a3b8;
+      min-height: 1rem;
+    }
+    .success { color: #22c55e; }
+    .error { color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎧 Claudia Pina</h1>
+    <p>AI Call Quality Evaluator</p>
+
+    <!-- Original Call -->
+    <h3>🎤 Original Call</h3>
+    <input type="file" id="origFile" accept="audio/*" />
+    <button onclick="transcribeSingle('orig')">Transcribe Original</button>
+    <div id="origStatus" class="status"></div>
+    <textarea id="origText" placeholder="Original call transcription..."></textarea>
+
+    <!-- Callback -->
+    <h3>📞 Callback</h3>
+    <input type="file" id="cbFile" accept="audio/*" />
+    <button onclick="transcribeSingle('cb')">Transcribe Callback</button>
+    <div id="cbStatus" class="status"></div>
+    <textarea id="cbText" placeholder="Callback transcription..."></textarea>
+
+    <select id="language">
+      <option value="auto">Auto Detect</option>
+      <option value="en">English</option>
+      <option value="ar">Arabic</option>
+      <option value="es">Spanish</option>
+      <option value="fr">French</option>
+    </select>
+
+    <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:1rem;">
+      <button class="small-btn" onclick="copyAll()">📋 Copy Both</button>
+      <button class="small-btn" onclick="sendToChatGPT()">💬 Send to ChatGPT</button>
+    </div>
+  </div>
+
+  <script>
+    const BASE_URL = "https://patriarchic-unstatic-khalil.ngrok-free.dev"; // update when ngrok restarts
+
+    async function transcribeSingle(type) {
+      const fileInput = document.getElementById(type === "orig" ? "origFile" : "cbFile");
+      const textBox   = document.getElementById(type === "orig" ? "origText" : "cbText");
+      const statusBox = document.getElementById(type === "orig" ? "origStatus" : "cbStatus");
+
+      if (!fileInput.files.length) {
+        statusBox.textContent = "Please select an audio file first!";
+        statusBox.className = "status error";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+      formData.append("language", document.getElementById("language").value);
+
+      statusBox.textContent = "🎙️ Transcribing...";
+      statusBox.className = "status";
+
+      try {
+        const res = await fetch(`${BASE_URL}/Transcribe`, { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.text) {
+          textBox.value = data.text;
+          statusBox.textContent = "✅ Done!";
+          statusBox.className = "status success";
+        } else {
+          statusBox.textContent = "⚠️ " + (data.error || "Failed to transcribe.");
+          statusBox.className = "status error";
+        }
+      } catch (err) {
+        statusBox.textContent = "❌ " + err.message;
+        statusBox.className = "status error";
+      }
+    }
+
+    function copyAll() {
+      const orig = document.getElementById("origText").value.trim();
+      const cb   = document.getElementById("cbText").value.trim();
+      if (!orig && !cb) return alert("Nothing to copy!");
+      const combined = `Original Call:\n${orig}\n\n--- Callback ---\n\n${cb}`;
+      navigator.clipboard.writeText(combined);
+      alert("✅ Both transcriptions copied!");
+    }
+
+function sendToChatGPT() {
+  const orig = document.getElementById("origText").value.trim();
+  const cb   = document.getElementById("cbText").value.trim();
+  if (!orig && !cb) {
+    alert("Please transcribe first!");
+    return;
+  }
+
+  // Reuse same tab each time by giving it a name
+  const chatWindow = window.open("about:blank", "claudiaChat");
+
+  const caseId = prompt("Enter Case ID or Ticket Number") || "Unknown";
+  const payload = { case_id: caseId, original_call_text: orig, callback_call_text: cb };
+  const promptText = `Evaluate this callback case as one interaction:\n\n${JSON.stringify(payload, null, 2)}`;
+  const encoded = encodeURIComponent(promptText);
+
+  if (chatWindow) {
+    chatWindow.location = `https://chat.openai.com/?q=${encoded}`;
+  } else {
+    alert("Please allow pop-ups and try again.");
+  }
+}
+
+
+
+    window.addEventListener("error", e => console.error("UI error:", e?.error || e?.message));
+  </script>
+</body>
+</html>
